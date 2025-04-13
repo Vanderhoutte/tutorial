@@ -61,7 +61,7 @@ class Armor
         }
 };
 
-cv::Mat binarization(cv::Mat& src)
+/*cv::Mat binarization(cv::Mat& src)
 {
     cv::Mat gray;
     cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
@@ -90,7 +90,7 @@ cv::Mat binarization(cv::Mat& src)
     );
     return binary;
 }
-
+*/
 
 cv::Mat binarization_optimized(cv::Mat& src)
 {
@@ -137,8 +137,5 @@ int main()
     cv::Mat binary = binarization_optimized(src);
     cv::imshow("binary",binary);
     cv::waitKey(0);
-    binary = binarization(src);
-    cv::imshow("binary",binary);
-    cv::waitKey(0); 
     return 0;
 }
