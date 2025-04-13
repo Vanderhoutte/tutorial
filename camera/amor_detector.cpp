@@ -124,6 +124,37 @@ cv::Mat binarization_optimized(cv::Mat& src)
     return binary;
 }
 
+std::vector<Light> find_lights(cv::Mat src,cv::Mat& binary)
+{
+    std::vector<Light> lights;
+    cv::Mat channels[3];
+    cv::split(src, channels);
+    cv::Mat color_mask;
+    cv::subtract(channels[0],channels[2],color_mask);
+    cv::Mat light_counter_image;
+    cv::threshold(
+        color_mask,
+        light_counter_image,
+        cv::THRESH_OTSU,
+        255,
+        cv::THRESH_BINARY
+    );
+    cv::dilate(light_counter_image, light_counter_image, cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3)));
+    cv::bitwise_and(light_counter_image, binary, light_counter_image);
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(light_counter_image, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    Light light_temp;
+    for (auto& contour : contours)
+    {
+        if(contour.size() < 4) continue;
+        light_temp = Light(cv::minAreaRect(contour));
+        light_temp.valid = (light_temp.length > light_temp.width * 3);
+        lights.push_back(light_temp);
+    }
+
+    return lights;
+}
+
 int main()
 {
     std::vector<Light> lights;
@@ -137,5 +168,6 @@ int main()
     cv::Mat binary = binarization_optimized(src);
     cv::imshow("binary",binary);
     cv::waitKey(0);
+    lights = find_lights(src,binary);
     return 0;
 }
