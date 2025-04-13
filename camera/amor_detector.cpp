@@ -1,5 +1,6 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <iostream>
+#include <vector>
 
 class Light
 {
@@ -46,6 +47,7 @@ class Armor
         float dis_to_center;
         std::string cla_result;
         armorPose pose;
+        Armor() = default;
         explicit Armor(const Light& L_Light,const Light& R_Light){
             this->L_Light = L_Light;
             this->R_Light = R_Light;
@@ -59,8 +61,84 @@ class Armor
         }
 };
 
+cv::Mat binarization(cv::Mat& src)
+{
+    cv::Mat gray;
+    cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
+    cv::Mat blur_gauss;
+    cv::GaussianBlur(
+        gray,
+        blur_gauss,
+        cv::Size(9, 9),
+        0
+    );
+    cv::Mat blur_bliater;
+    cv::bilateralFilter(
+        gray,
+        blur_bliater,
+        3,
+        3,
+        3
+    );
+    cv::Mat binary;
+    cv::threshold(
+        gray,
+        binary,
+        cv::THRESH_OTSU,
+        255,
+        cv::THRESH_BINARY
+    );
+    return binary;
+}
+
+
+cv::Mat binarization_optimized(cv::Mat& src)
+{
+    cv::Mat gray;
+    cv::cvtColor(src, gray, cv::COLOR_BGR2GRAY);
+    cv::Mat gray_canny;
+    cv::Canny(gray, gray_canny,100,300);
+    cv::Mat blur_gauss;
+    cv::GaussianBlur(
+        gray_canny,
+        blur_gauss,
+        cv::Size(9, 9),
+        0
+    );
+    cv::Mat blur_bliater;
+    cv::bilateralFilter(
+        blur_gauss,
+        blur_bliater,
+        3,
+        3,
+        3
+    );
+    cv::Mat binary;
+    cv::threshold(
+        blur_bliater,
+        binary,
+        cv::THRESH_OTSU,
+        255,
+        cv::THRESH_BINARY
+    );
+    return binary;
+}
 
 int main()
 {
-    
+    std::vector<Light> lights;
+    std::vector<Armor> armors;
+    cv::Mat src = cv::imread("./38.jpg");
+    if (src.empty())
+    {
+        std::cerr << "Error: Could not load image!" << std::endl;
+        return -1;
+    }
+    cv::Mat binary = binarization_optimized(src);
+    cv::imshow("binary",binary);
+    cv::waitKey(0);
+    binary = binarization(src);
+    cv::imshow("binary",binary);
+    cv::waitKey(0); 
+    return 0;
 }
