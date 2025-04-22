@@ -11,9 +11,9 @@ cv::Mat distortion_coefficients = (cv::Mat_<double>(1, 5) <<
     -0.051836613762195866, 0.29341513924119095, 0.001501183796729562, 0.0009386915104617738, 0.0);
 std::vector<cv::Point3f> object_points = {
     {0.0, 0.0, 0.0},
-    {0.135, 0.0, 0.0},
+    {0.0, 0.055, 0.0},
     {0.135, 0.055, 0.0},
-    {0.0, 0.055, 0.0}
+    {0.135, 0.0, 0.0}
 };
 
 class Light
@@ -79,10 +79,10 @@ class Armor
             this->L_Light = L_Light;
             this->R_Light = R_Light;
             this->points = {
-                L_Light.point[0],  // 左上角对应object_points[0]
-                R_Light.point[1],  // 右上角对应object_points[1] 
-                R_Light.point[2],  // 右下角对应object_points[2]
-                L_Light.point[3]   // 左下角对应object_points[3]
+                L_Light.top,  // 左上角对应object_points[0]
+                L_Light.bottom,  // 右上角对应object_points[1] 
+                R_Light.bottom,  // 右下角对应object_points[2]
+                R_Light.top   // 左下角对应object_points[3]
             };
             this->center = (L_Light.center + R_Light.center) / 2 ;
             light_height_ratio = L_Light.length / R_Light.length;
@@ -260,6 +260,7 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
             if(light_height_ratio_valid && light_angle_diff_valid && angle_valid && light_center_distance_valid)
             {
                 new_Armors.push_back(Armor_temp);
+                std::cout << "position in camera:" << Armor_temp.points << std::endl;
             }
         }    
     }
@@ -293,7 +294,9 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
         cv::THRESH_BINARY
     );
     // 膨胀，使灯条更加连续
-    kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+    /* kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
+    cv::morphologyEx(light_contour_binary_image, light_contour_binary_image, cv::MORPH_DILATE, kernel); */
+    kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(3, 3));
     cv::dilate(light_contour_binary_image, light_contour_binary_image, kernel);
     cv::imshow("test",light_contour_binary_image);
     cv::waitKey(0);
@@ -309,10 +312,11 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
         }
 
         Light light_tmp = Light(cv::minAreaRect(contour));
-        light_tmp.valid = (light_tmp.length > light_tmp.width * 3) && (std::abs(light_tmp.angle) < 25);
+        light_tmp.valid = (light_tmp.length > light_tmp.width * 2) && (std::abs(light_tmp.angle) < 25);
 
         if (light_tmp.valid == true) {
             tmp_lights.push_back(light_tmp);
+            std::cout << "light:" << light_tmp.center << std::endl;
             for(int j=0; j<4; j++) {
                 cv::line(visualization, light_tmp.point[j], 
                         light_tmp.point[(j+1)%4], 
@@ -338,6 +342,17 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
     return tmp_lights;
 }
 
+cv::Mat adjustExposure(cv::Mat& input, double gamma) {
+    cv::Mat lookupTable(1, 256, CV_8U);
+    uchar* p = lookupTable.ptr();
+    for(int i = 0; i < 256; ++i) {
+        p[i] = cv::saturate_cast<uchar>(pow(i / 255.0, gamma) * 255.0);
+    }
+    cv::Mat output;
+    cv::LUT(input, lookupTable, output);
+    return output;
+}
+
 /* std::vector<Light> find_lights_HSV(cv::Mat input)
 {
 
@@ -345,14 +360,24 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
 
 int main()
 {
+    cv::namedWindow("Darkened Image", cv::WINDOW_NORMAL); cv::resizeWindow("Darkened Image", 64, 48);
+    cv::namedWindow("binary", cv::WINDOW_NORMAL); cv::resizeWindow("binary", 64, 48);
+    cv::namedWindow("Detected Lights", cv::WINDOW_NORMAL); cv::resizeWindow("Detected Lights", 128, 72);
+    cv::namedWindow("Detected Armor", cv::WINDOW_NORMAL); cv::resizeWindow("Detected Armor", 128, 72);
+    cv::namedWindow("test", cv::WINDOW_NORMAL); cv::resizeWindow("test", 640, 480);
     std::vector<Light> lights;
     std::vector<Armor> armors;
-    cv::Mat src = cv::imread("../data_armor/armors/21.jpg");
+    cv::Mat src = cv::imread("../data_armor/armors/109.jpg");
     if (src.empty())
     {
         std::cerr << "Error: Could not load image!" << std::endl;
         return -1;
     }
+    double darken_gamma = 4;
+    cv::Mat dark_image = adjustExposure(src, darken_gamma);
+    cv::imshow("Darkened Image", dark_image);
+    cv::waitKey(0);
+    src = dark_image;
     cv::Mat binary = binarization(src);
     cv::imshow("binary",binary);
     cv::waitKey(0);
@@ -375,7 +400,19 @@ int main()
                     armor.points[(i+1)%4], 
                     cv::Scalar(0, 255, 0),  // 绿色线条
                     2);                     // 线宽
-        }
+            cv::circle(visualization,
+                    armor.points[i],
+                    3,
+                    cv::Scalar(0, 0, 255),  // 红色圆点
+                    3);                     // 圆点半径
+            cv::putText(visualization,
+                        std::to_string(i),
+                        armor.points[i] + cv::Point2f(5,5),
+                        cv::FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        cv::Scalar(255,255,255),
+                        2);
+                }
         
         // 绘制中心点
         cv::circle(visualization, armor.center, 5, cv::Scalar(0, 0, 255), -1);  // 红色实心圆
