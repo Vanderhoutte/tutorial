@@ -17,7 +17,7 @@ std::vector<cv::Point3f> object_points = {
 };
 
 int brightness_threshold = 150;
-std::string dataname = "magic";
+std::string dataname = "31";
 
 
 class Light
@@ -406,7 +406,7 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
             std::cout << "light angle invalid" << std::endl;
         }
         
-        if (light_tmp.valid) {
+        if (light_ratio_valid) {
             tmp_lights.push_back(light_tmp);
             std::cout << "light:" << light_tmp.center << std::endl;
             for(int j=0; j<4; j++) {
