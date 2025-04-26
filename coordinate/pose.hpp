@@ -80,5 +80,11 @@ namespace coordinate {
                 return Pose(angles, t_rot);
             }
             
+            std::vector<double> getRotation() const {//获取欧拉角
+                return q;
+            }
+            cv::Point3d getTranslation() const {//获取平移向量
+                return t;
+            }
     };
 };

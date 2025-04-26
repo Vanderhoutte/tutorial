@@ -16,8 +16,8 @@ std::vector<cv::Point3f> object_points = {
     {0.135, 0.0, 0.0}
 };
 
-int brightness_threshold = 150;
-std::string dataname = "31";
+int brightness_threshold = 180;
+std::string dataname = "big";
 
 
 class Light
