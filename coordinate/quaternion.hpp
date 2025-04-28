@@ -9,6 +9,9 @@ namespace coordinate {
     class Quaternion {
         private:
             double w, x, y, z;//基本的四元数表示
+            static double clampNearZero(double val) {
+                return std::abs(val) < 1e-10 ? 0.0 : val;
+            }
         public:
             Quaternion(double w, double x, double y, double z) : w(w), x(x), y(y), z(z) {}//直接给定的构造函数
             Quaternion(const Quaternion& q) : w(q.w), x(q.x), y(q.y), z(q.z) {}//拷贝构造函数
@@ -51,6 +54,27 @@ namespace coordinate {
                 }
             }
 
+            Quaternion(const cv::Point3d& p) : w(0), x(p.x), y(p.y), z(p.z) {}//通过三维点构造四元数
+            Quaternion(const cv::Mat& r_vec) {//通过旋转向量构造四元数
+                if (r_vec.rows != 3 || r_vec.cols != 3) {
+                    throw std::runtime_error("Rotation vector must be 3x3");
+                }
+                if (r_vec.type() != CV_64F) {
+                    throw std::runtime_error("Matrix must be double type");
+                }
+                double theta = cv::norm(r_vec);
+                if (theta < 1e-10) {
+                    w = 1;
+                    x = y = z = 0;
+                } else {
+                    double half_theta = theta / 2;
+                    double sin_half_theta = sin(half_theta);
+                    w = cos(half_theta);
+                    x = sin_half_theta * r_vec.at<double>(0) / theta;
+                    y = sin_half_theta * r_vec.at<double>(1) / theta;
+                    z = sin_half_theta * r_vec.at<double>(2) / theta;
+                }
+            }
             Quaternion() = default;//默认构造函数
 
 
@@ -87,9 +111,14 @@ namespace coordinate {
             Quaternion normalized() const {//四元数归一化
                 double norm_value = norm();
                 if (norm_value < 1e-8) {
-                    return Quaternion(1, 0, 0, 0); // 返回默认单位四元数
+                    return Quaternion(1, 0, 0, 0);
                 }
-                return Quaternion(w / norm_value, x / norm_value, y / norm_value, z / norm_value);
+                return Quaternion(
+                    clampNearZero(w / norm_value),
+                    clampNearZero(x / norm_value),
+                    clampNearZero(y / norm_value),
+                    clampNearZero(z / norm_value)
+                );
             }
             Quaternion conjugate() const {//共轭四元数
                 return Quaternion(w, -x, -y, -z);
@@ -101,29 +130,47 @@ namespace coordinate {
             Quaternion operator-(const Quaternion& q) const {//四元数减法
                 return Quaternion(w - q.w, x - q.x, y - q.y, z - q.z);
             }
-            Quaternion operator*(const Quaternion& q) const {//四元数乘法
+            Quaternion operator*(const Quaternion& q) const noexcept {//四元数乘法
+                if(this->get_w() == 1 && this->get_x() == 0 && this->get_y() == 0 && this->get_z() == 0) {
+                    return q;
+                }
+                if(q.get_w() == 1 && q.get_x() == 0 && q.get_y() == 0 && q.get_z() == 0) {
+                    return *this;
+                }
                 return Quaternion(
                     w * q.w - x * q.x - y * q.y - z * q.z,
                     w * q.x + x * q.w + y * q.z - z * q.y,
                     w * q.y - x * q.z + y * q.w + z * q.x,
                     w * q.z + x * q.y - y * q.x + z * q.w
-                );
+                ).normalized();
             }
             Quaternion operator*(double scalar) const {//四元数与标量乘法
-                return Quaternion(w * scalar, x * scalar, y * scalar, z * scalar);
+                return Quaternion(w * scalar, x * scalar, y * scalar, z * scalar).normalized();
             }
 
             friend Quaternion operator*(double scalar, const Quaternion& q) {
                 return q * scalar;
             }
 
-            cv::Point3d operator*(const cv::Point3d& p) const {//四元数与三维向量乘法
-                if(this->norm() < 1e-8) {
-                    throw std::runtime_error("Quaternion norm is too small");
-                }
-                Quaternion vq(0, p.x, p.y, p.z);
-                Quaternion result = (*this * vq * this->conjugate());
-                return cv::Point3d( result.x, result.y, result.z);
+            cv::Point3d rotate(const cv::Point3d& p) const {
+                Quaternion p_q(0, p.x, p.y, p.z);
+                Quaternion result = (*this) * p_q * this->conjugate();
+        
+                // 添加数值截断
+                return cv::Point3d(
+                    clampNearZero(result.x),
+                    clampNearZero(result.y),
+                    clampNearZero(result.z)
+                );
+            }
+            
+            // 修改运算符重载保持兼容性
+            cv::Point3d operator*(const cv::Point3d& p) const {
+                return this->rotate(p);
+            }
+
+            friend cv::Point3d operator*(const cv::Point3d& p, const Quaternion& q) {
+                return q.rotate(p);
             }
 
             Quaternion operator/(double scalar) const {//四元数与标量除法
@@ -154,7 +201,10 @@ namespace coordinate {
             
             //^获取四元数的各个分量
 
-            static Quaternion fromEulerAngles(double roll, double pitch, double yaw) {//欧拉角转四元数
+            static Quaternion fromEulerAngles(double roll, double pitch, double yaw) {//欧拉角转四元数，输入为弧度
+                if(roll == 0.0 && pitch == 0.0 && yaw == 0.0) {
+                    return Quaternion(1, 0, 0, 0); // 返回单位四元数
+                }
                 // 计算每个轴的半角
                 double cy = cos(yaw * 0.5);
                 double sy = sin(yaw * 0.5);
@@ -165,10 +215,10 @@ namespace coordinate {
         
                 // 四元数乘法顺序：Z → Y → X 旋转
                 return Quaternion(
-                    cy * cp * cr + sy * sp * sr,
-                    cy * cp * sr - sy * sp * cr,
-                    sy * cp * sr + cy * sp * cr,
-                    sy * cp * cr - cy * sp * sr
+                    clampNearZero(cy * cp * cr + sy * sp * sr),
+                    clampNearZero(cy * cp * sr - sy * sp * cr),
+                    clampNearZero(sy * cp * sr + cy * sp * cr),
+                    clampNearZero(sy * cp * cr - cy * sp * sr)
                 ).normalized();
             }
             std::vector<double> toEulerAngles() const {//四元数转欧拉角
@@ -263,7 +313,7 @@ namespace coordinate {
                     q[0] = (mat.at<double>(k,j) - mat.at<double>(j,k)) / (2 * s);
                     q[j+1] = (mat.at<double>(j,i) + mat.at<double>(i,j)) / (2 * s);
                     q[k+1] = (mat.at<double>(k,i) + mat.at<double>(i,k)) / (2 * s);
-                    
+
                     return Quaternion(q[0], q[1], q[2], q[3]).normalized();
                 }
             }
@@ -287,5 +337,9 @@ namespace coordinate {
                 }
                 return cv::Point3d(x / s, y / s, z / s) * angle;
             }
-    };
+    
+            cv::Point3d toPoint3d() const {//四元数转三维点
+                return cv::Point3d(x, y, z);
+            }
+        };
 };
