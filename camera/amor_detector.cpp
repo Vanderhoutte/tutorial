@@ -16,8 +16,8 @@ std::vector<cv::Point3f> object_points = {
     {0.135, 0.0, 0.0}
 };
 
-int brightness_threshold = 190;
-std::string dataname = "magic";
+int brightness_threshold = 10;
+std::string dataname = "image";
 
 
 class Light
@@ -395,7 +395,7 @@ std::vector<Armor> Armor_Establish(std::vector<Light> lights_in)
         armor_num++;
         Light light_tmp = Light(cv::minAreaRect(contour));
         light_tmp.valid = (light_tmp.length > light_tmp.width * 2) && (std::abs(light_tmp.angle) < 25);
-        bool light_ratio_valid = light_tmp.length > light_tmp.width * 3;
+        bool light_ratio_valid = light_tmp.length > light_tmp.width * 2;
         bool light_angle_valid = std::abs(light_tmp.angle) < 25;
         if (!light_ratio_valid)
         {
@@ -467,7 +467,7 @@ int main()
     cv::namedWindow("test", cv::WINDOW_NORMAL); cv::resizeWindow("test", 640, 480);
     std::vector<Light> lights;
     std::vector<Armor> armors;
-    cv::Mat src = cv::imread("../data_armor/armors/"+dataname+".jpg");
+    cv::Mat src = cv::imread("../data_armor/armors/"+dataname+".png");
     if (src.empty())
     {
         std::cerr << "Error: Could not load image!" << std::endl;
@@ -477,7 +477,7 @@ int main()
     cv::Mat dark_image = adjustExposure(src, darken_gamma);
     cv::imshow("Darkened Image", dark_image);
     cv::waitKey(0);
-    src = dark_image;
+    //src = dark_image;
     cv::Mat binary = binarization(src);
     cv::imshow("binary",binary);
     cv::waitKey(0);
